@@ -9,7 +9,6 @@ import {
 } from "./services/bribes";
 import { getDeadlineFromCron } from "./utils";
 import { configs } from "./config";
-import { getAllProposalIds } from "./services/proposals";
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -19,50 +18,78 @@ app.get("/", (c) => {
   return c.text("Hello Hono!");
 });
 
+export const getCacheKey = (network: Network, deadline?: string) => {
+  return `incentives:${network}${deadline ? `:${deadline}` : ""}`;
+};
+
+const getCacheOptions = (deadline: bigint) => {
+  const now = BigInt(Math.floor(Date.now() / 1000));
+  // If deadline has passed, cache permanently (no expiration)
+  // Otherwise cache for 5 minutes
+  return deadline < now ? {} : { expirationTtl: 300 };
+};
+
 app.get("/:network/get-incentives", async (c) => {
-  const network = c.req.param("network") as keyof typeof Network;
+  const network = c.req.param("network") as Network;
 
   if (!network) {
     return c.json({ error: "Network is required" }, 400);
   }
 
-  if (!Object.keys(Network).includes(network)) {
+  if (!Object.values(Network).includes(network)) {
     return c.json({ error: "Invalid network" }, 400);
   }
 
-  const cron = configs[Network[network]].cronJobs.setProposals.cron;
+  const cron = configs[network].cronJobs.setProposals.cron;
   const deadline = getDeadlineFromCron(cron);
 
-  const identifiers = await getBribeIdentifiers(
-    deadline,
-    Network[network as keyof typeof Network]
-  );
+  // Try to get from cache first
+  const cacheKey = getCacheKey(network);
+  const cached = await c.env.INCENTIVES_KV.get(cacheKey);
+  if (cached) {
+    return c.json(JSON.parse(cached));
+  }
+
+  const identifiers = await getBribeIdentifiers(deadline, network);
 
   if (identifiers.length === 0) {
-    return c.json({ bribes: [] });
+    const emptyResponse = { bribes: [] };
+    // For empty responses, always use short cache time
+    await c.env.INCENTIVES_KV.put(cacheKey, JSON.stringify(emptyResponse), {
+      expirationTtl: 60,
+    });
+    return c.json(emptyResponse);
   }
 
   const bribes = await getBribes(
     identifiers as unknown as `0x${string}`[],
-    Network[network as keyof typeof Network]
+    network
   );
 
-  return c.json({
+  const response = {
     bribes: bribes.map((b) => ({
       ...b,
       amount: b.amount.toString(),
     })),
-  });
+  };
+
+  await c.env.INCENTIVES_KV.put(
+    cacheKey,
+    JSON.stringify(response),
+    getCacheOptions(deadline)
+  );
+  return c.json(response);
 });
 
 app.get("/:network/get-incentives/:deadline", async (c) => {
-  const network = c.req.param("network") as keyof typeof Network;
+  const network = c.req.param("network") as Network;
   const deadline = c.req.param("deadline") as string;
+
   if (!network) {
     return c.json({ error: "Network is required" }, 400);
   }
 
-  if (!Object.keys(Network).includes(network)) {
+  if (!Object.values(Network).includes(network)) {
     return c.json({ error: "Invalid network" }, 400);
   }
 
@@ -70,45 +97,43 @@ app.get("/:network/get-incentives/:deadline", async (c) => {
     return c.json({ error: "Deadline is required" }, 400);
   }
 
-  const bigintDeadline = BigInt(deadline);
+  // Try to get from cache first
+  const cacheKey = getCacheKey(network, deadline);
+  const cached = await c.env.INCENTIVES_KV.get(cacheKey);
+  if (cached) {
+    return c.json(JSON.parse(cached));
+  }
 
-  const identifiers = await getBribeIdentifiers(
-    bigintDeadline,
-    Network[network]
-  );
+  const bigintDeadline = BigInt(deadline);
+  const identifiers = await getBribeIdentifiers(bigintDeadline, network);
 
   if (identifiers.length === 0) {
-    return c.json({ bribes: [] });
+    const emptyResponse = { bribes: [] };
+    // For empty responses, always use short cache time
+    await c.env.INCENTIVES_KV.put(cacheKey, JSON.stringify(emptyResponse), {
+      expirationTtl: 60,
+    });
+    return c.json(emptyResponse);
   }
 
   const bribes = await getBribes(
     identifiers as unknown as `0x${string}`[],
-    Network[network]
+    network
   );
 
-  return c.json({
+  const response = {
     bribes: bribes.map((b) => ({
       ...b,
       amount: b.amount.toString(),
     })),
-  });
-});
+  };
 
-app.get("/:network/test-request-speeds", async (c) => {
-  const network = c.req.param("network") as keyof typeof Network;
-
-  console.time("getBribeIdentifiers");
-  const identifiers = await getBribeIdentifiers(
-    BigInt(1736294400),
-    Network[network]
+  await c.env.INCENTIVES_KV.put(
+    cacheKey,
+    JSON.stringify(response),
+    getCacheOptions(bigintDeadline)
   );
-  console.timeEnd("getBribeIdentifiers");
-
-  console.time("getBribes");
-  await getBribes(identifiers as unknown as `0x${string}`[], Network[network]);
-  console.timeEnd("getBribes");
-
-  return c.text("Test request speeds");
+  return c.json(response);
 });
 
 export default app;

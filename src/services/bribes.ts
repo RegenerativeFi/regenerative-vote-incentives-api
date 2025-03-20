@@ -4,15 +4,9 @@ import { configs } from "../config";
 import { Network } from "../config/types";
 import { getAllProposalIds } from "./proposals";
 
-export const allowedTokens = async (network: Network) => {
+export const allowedTokens = (network: Network) => {
   const config = configs[network];
-  const bribeMarket = getContract({
-    address: config.contracts.regenerativeBribeMarket as `0x${string}`,
-    abi: BribeMarketAbi,
-    client: config.client,
-  });
-  const tokens = await bribeMarket.read.getWhitelistedTokens();
-  return tokens;
+  return config.allowedTokens;
 };
 
 export const generateRewardIdentifier = (
@@ -33,7 +27,7 @@ export const getBribeIdentifiers = async (
   network: Network
 ) => {
   const config = configs[network];
-  const tokens = await allowedTokens(network);
+  const tokens = allowedTokens(network);
   const identifiers = tokens.map((token) =>
     generateRewardIdentifier(
       config.contracts.regenerativeBribeMarket as `0x${string}`,

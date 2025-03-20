@@ -3,4 +3,5 @@ export type Bindings = {
   KV: KVNamespace;
   URL: string;
   PRIVATE_KEY: `0x${string}`;
+  INCENTIVES_KV: KVNamespace;
 };

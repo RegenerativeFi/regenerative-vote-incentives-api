@@ -1,52 +1,31 @@
-import { getContract } from "viem";
-import { GaugeRegistryAbi, RewardsOnlyGaugeAbi } from "../config/abis";
-import { configs } from "../config";
 import { Network } from "../config/types";
+import { configs } from "../config";
 
 export const getRegisteredGauges = async (network: Network) => {
-  const registry = getContract({
-    address: configs[network].contracts.gaugeRegistry as `0x${string}`,
-    abi: GaugeRegistryAbi,
-    client: configs[network].client,
-  });
-
-  try {
-    // Get number of gauges
-
-    const count = await registry.read.totalGauges();
-    // Get gauges
-    const gauges = await registry.read.getGauges([BigInt(0), BigInt(count)]);
-    return gauges;
-  } catch (error) {
-    console.error("Error getting gauges", error);
-    return [];
-  }
+  return (
+    configs[network].gauges?.map((gauge) => gauge.address as `0x${string}`) ??
+    []
+  );
 };
 
 export const getGaugeLPToken = async (
   gaugeAddress: `0x${string}`,
   network: Network
 ) => {
-  const gauge = getContract({
-    address: gaugeAddress,
-    abi: RewardsOnlyGaugeAbi,
-    client: configs[network].client,
-  });
-
-  const lpToken = await gauge.read.lp_token();
-
-  return lpToken;
+  const gauge = configs[network].gauges?.find(
+    (g) => g.address.toLowerCase() === gaugeAddress.toLowerCase()
+  );
+  return (gauge?.lpToken ?? "") as `0x${string}`;
 };
 
 export const getGaugesLPToken = async (
   gaugeAddresses: `0x${string}`[],
   network: Network
 ) => {
-  const gauges = await Promise.all(
-    gaugeAddresses.map(async (gaugeAddress) => {
-      return getGaugeLPToken(gaugeAddress, network);
-    })
-  );
-
-  return gauges;
+  return gaugeAddresses.map((gaugeAddress) => {
+    const gauge = configs[network].gauges?.find(
+      (g) => g.address.toLowerCase() === gaugeAddress.toLowerCase()
+    );
+    return (gauge?.lpToken ?? "") as `0x${string}`;
+  });
 };
