@@ -30,6 +30,6 @@ crons = [ "0 0 * * *" ]
 # enabled = true
 # head_sampling_rate = 1
 
-kv_namespaces = [
-  { binding = "INCENTIVES_KV", id = "YOUR_KV_ID" }
-]
+[[kv_namespaces]]
+binding = "INCENTIVES_KV"
+id = "86e816747a614568ade73194d14aec27"
