@@ -1,4 +1,4 @@
-import app from "./src";
+import app, { getBribesAndCache } from "./src";
 import { privateKeyToAccount } from "viem/accounts";
 import { Network } from "./src/config/types";
 import { setProposals } from "./src/scheduled";
@@ -12,6 +12,7 @@ export interface Env {
   BW: Fetcher;
   URL: string;
   PRIVATE_KEY: `0x${string}`;
+  INCENTIVES_KV: KVNamespace;
 }
 
 const chainAccount = (env: Env) => {
@@ -57,6 +58,12 @@ export default {
     console.log("Cron job triggered", event.cron);
     switch (event.cron) {
       case "0 0 * * *":
+        // Cache previous deadline for incentives
+        const previousDeadline = getPreviousDeadline(
+          configs[Network.CELO].proposalStartTime,
+          configs[Network.CELO].proposalDuration
+        );
+        await getBribesAndCache(Network.CELO, BigInt(previousDeadline), env);
         await setProposalsForNetworks(env, [Network.CELO, Network.ALFAJORES]);
         await transferBribesForNetworks(env, [Network.CELO, Network.ALFAJORES]);
         break;

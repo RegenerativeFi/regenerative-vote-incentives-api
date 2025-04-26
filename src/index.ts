@@ -9,17 +9,47 @@ import {
 } from "./services/bribes";
 import { getDeadlineFromCron } from "./utils";
 import { configs } from "./config";
+import { Env } from "../index";
 
 const app = new Hono<{ Bindings: Bindings }>();
 
 app.use(cors());
 
 app.get("/", (c) => {
-  return c.text("Hello Hono!");
+  return c.text("Hello World");
 });
 
-export const getCacheKey = (network: Network, deadline?: string) => {
-  return `incentives:${network}${deadline ? `:${deadline}` : ""}`;
+export const getCacheKey = (network: Network, deadline: string) => {
+  return `incentives:${network}:${deadline}`;
+};
+
+export const getBribesAndCache = async (
+  network: Network,
+  deadline: bigint,
+  env: Env
+) => {
+  const identifiers = await getBribeIdentifiers(deadline, network);
+  const cacheKey = getCacheKey(network, deadline.toString());
+
+  if (identifiers.length === 0) {
+    const emptyResponse = { bribes: [] };
+    // For empty responses, always use short cache time
+    await env.INCENTIVES_KV.put(cacheKey, JSON.stringify(emptyResponse));
+  }
+
+  const bribes = await getBribes(
+    identifiers as unknown as `0x${string}`[],
+    network
+  );
+
+  const response = {
+    bribes: bribes.map((b) => ({
+      ...b,
+      amount: b.amount.toString(),
+    })),
+  };
+
+  await env.INCENTIVES_KV.put(cacheKey, JSON.stringify(response));
 };
 
 const getCacheOptions = (deadline: bigint) => {
@@ -44,7 +74,7 @@ app.get("/:network/get-incentives", async (c) => {
   const deadline = getDeadlineFromCron(cron);
 
   // Try to get from cache first
-  const cacheKey = getCacheKey(network);
+  const cacheKey = getCacheKey(network, deadline.toString());
   const cached = await c.env.INCENTIVES_KV.get(cacheKey);
   if (cached) {
     return c.json(JSON.parse(cached));
