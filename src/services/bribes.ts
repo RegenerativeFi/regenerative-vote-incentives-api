@@ -22,13 +22,18 @@ export const generateRewardIdentifier = (
   );
 };
 
-export const getBribeIdentifiers = async (
+type IdentifierResults = {
+  rewardIdentifier: `0x${string}`;
+  bribeIdentifiers: `0x${string}`[];
+}[];
+
+const getIdentifiers = async (
   deadline: bigint,
   network: Network
-) => {
+): Promise<IdentifierResults> => {
   const config = configs[network];
   const tokens = allowedTokens(network);
-  const identifiers = tokens.map((token) =>
+  const potentialRewardIds = tokens.map((token) =>
     generateRewardIdentifier(
       config.contracts.regenerativeBribeMarket as `0x${string}`,
       token,
@@ -36,27 +41,47 @@ export const getBribeIdentifiers = async (
     )
   );
 
-  let allBribeIdentifiers: `0x${string}`[] = [];
-
   const results = await config.client.multicall({
-    contracts: identifiers.map((identifier) => ({
+    contracts: potentialRewardIds.map((identifier) => ({
       address: config.contracts.bribeVault as `0x${string}`,
       abi: BribeVaultAbi,
       functionName: "getBribeIdentifiersByRewardIdentifier",
       args: [identifier as `0x${string}`],
     })),
   });
-  for (const result of results) {
-    if (
-      result.status === "success" &&
-      Array.isArray(result.result) &&
-      result.result.length > 0
-    ) {
-      allBribeIdentifiers = [...allBribeIdentifiers, ...result.result];
-    }
-  }
 
-  return allBribeIdentifiers;
+  return potentialRewardIds
+    .map((rewardId, index) => {
+      const result = results[index];
+      if (
+        result.status === "success" &&
+        Array.isArray(result.result) &&
+        result.result.length > 0
+      ) {
+        return {
+          rewardIdentifier: rewardId,
+          bribeIdentifiers: result.result,
+        };
+      }
+      return null;
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+};
+
+export const getRewardIdentifiers = async (
+  deadline: bigint,
+  network: Network
+): Promise<`0x${string}`[]> => {
+  const results = await getIdentifiers(deadline, network);
+  return results.map((r) => r.rewardIdentifier);
+};
+
+export const getBribeIdentifiers = async (
+  deadline: bigint,
+  network: Network
+): Promise<`0x${string}`[]> => {
+  const results = await getIdentifiers(deadline, network);
+  return results.flatMap((r) => r.bribeIdentifiers);
 };
 
 export const getBribes = async (

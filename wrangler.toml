@@ -33,3 +33,10 @@ crons = [ "0 0 * * *" ]
 [[kv_namespaces]]
 binding = "INCENTIVES_KV"
 id = "86e816747a614568ade73194d14aec27"
+
+# wrangler.toml (wrangler v3.88.0^)
+[observability.logs]
+enabled = true
+
+
+

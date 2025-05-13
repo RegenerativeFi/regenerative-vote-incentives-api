@@ -5,7 +5,10 @@ import { setProposals } from "./src/scheduled";
 import { transferBribes } from "./src/scheduled/transfer-bribes";
 import { getPreviousDeadline } from "./src/utils";
 import { configs } from "./src/config";
-import { getBribeIdentifiers } from "./src/services/bribes";
+import {
+  getBribeIdentifiers,
+  getRewardIdentifiers,
+} from "./src/services/bribes";
 
 export interface Env {
   KV: KVNamespace;
@@ -34,11 +37,12 @@ const transferBribesForNetworks = async (env: Env, networks: Network[]) => {
       config.proposalStartTime,
       config.proposalDuration
     );
-
-    const identifiers = await getBribeIdentifiers(
+    console.log("Previous deadline", previousDeadline);
+    const identifiers = await getRewardIdentifiers(
       BigInt(previousDeadline),
       network
     );
+    console.log("Identifiers", identifiers);
 
     if (identifiers.length > 0) {
       await transferBribes(chainAccount(env), identifiers, network);
@@ -63,6 +67,7 @@ export default {
           configs[Network.CELO].proposalStartTime,
           configs[Network.CELO].proposalDuration
         );
+        console.log("Previous deadline", previousDeadline);
         await getBribesAndCache(Network.CELO, BigInt(previousDeadline), env);
         await setProposalsForNetworks(env, [Network.CELO, Network.ALFAJORES]);
         await transferBribesForNetworks(env, [Network.CELO, Network.ALFAJORES]);
